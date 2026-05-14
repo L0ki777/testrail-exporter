@@ -354,7 +354,7 @@ async function onProjectChange() {
 
   try {
     const data = await apiGet(`get_suites/${projectId}`);
-    const suites = Array.isArray(data) ? data : [data];
+    const suites = Array.isArray(data) ? data : (data.suites ? data.suites : [data]);
 
     if (suites.length === 0) {
       suiteSelect.innerHTML = '<option value="">No suites found</option>';
@@ -363,10 +363,12 @@ async function onProjectChange() {
 
     suiteSelect.innerHTML = '<option value="">Select a suite...</option>';
     suites.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.id;
-      opt.textContent = `${s.name} (S${s.id})`;
-      suiteSelect.appendChild(opt);
+      if (s && s.name) {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = `${s.name}`;
+        suiteSelect.appendChild(opt);
+      }
     });
 
     suiteSelect.disabled = false;
