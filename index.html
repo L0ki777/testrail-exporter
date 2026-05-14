@@ -227,7 +227,8 @@ function cleanHtml(text) {
     .replace(/&gt;/g, ">")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -239,24 +240,35 @@ function extractSteps(c) {
       expected: cleanHtml(s.expected)
     }));
   }
+
+  const plainExpected = cleanHtml(c.custom_expected || "");
+
   if (c.custom_steps) {
     const raw = c.custom_steps;
     // Try HTML list items first
     const liMatches = raw.match(/<li[^>]*>(.*?)<\/li>/gis);
-    if (liMatches && liMatches.length > 1) {
-      return liMatches.map((li, i) => ({
+    if (liMatches && liMatches.length > 0) {
+      const steps = liMatches.map((li, i) => ({
         step: i + 1,
-        action: cleanHtml(li),
+        action: cleanHtml(li).replace(/^\s*•\s*/, "• ").trim(),
         expected: ""
       }));
+      if (plainExpected && steps.length > 0) {
+        steps[steps.length - 1].expected = plainExpected;
+      }
+      return steps;
     }
     // Fall back to numbered plain text
     const clean = cleanHtml(raw);
     const lines = clean.split(/(?:^|\n)\s*\d+\.\s+/).filter(Boolean);
     if (lines.length > 1) {
-      return lines.map((l, i) => ({ step: i + 1, action: l.trim(), expected: "" }));
+      const steps = lines.map((l, i) => ({ step: i + 1, action: l.trim(), expected: "" }));
+      if (plainExpected && steps.length > 0) {
+        steps[steps.length - 1].expected = plainExpected;
+      }
+      return steps;
     }
-    return [{ step: 1, action: clean, expected: "" }];
+    return [{ step: 1, action: clean, expected: plainExpected }];
   }
   return [{ step: 1, action: "No steps found", expected: "" }];
 }
