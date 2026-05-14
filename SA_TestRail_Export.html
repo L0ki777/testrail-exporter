@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestRail Step Exporter</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f3f4f6; min-height: 100vh; padding: 24px; }
+  .container { max-width: 960px; margin: 0 auto; }
+  
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { font-size: 24px; color: #1e293b; margin-bottom: 4px; }
+  .header p { color: #64748b; font-size: 14px; }
+  
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 16px; }
+  
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+  
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field input, .field select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; transition: border-color 0.2s; background: #fff; }
+  .field input:focus, .field select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+  .field select:disabled { background: #f3f4f6; color: #9ca3af; }
+  
+  .btn-row { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  
+  .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #2563eb; }
+  .btn-connect { background: #7c3aed; color: #fff; }
+  .btn-connect:hover:not(:disabled) { background: #6d28d9; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-success:hover:not(:disabled) { background: #15803d; }
+  .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+  .btn-outline:hover:not(:disabled) { background: #f9fafb; }
+  
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  .alert-error { background: #fef2f2; border: 1px solid #fca5a5; color: #dc2626; }
+  .alert-success { background: #f0fdf4; border: 1px solid #86efac; color: #16a34a; }
+  
+  .status { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.connected { background: #16a34a; }
+  .status-dot.disconnected { background: #dc2626; }
+  
+  .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .results-header h2 { font-size: 16px; color: #1e293b; }
+  .badge { background: #e0e7ff; color: #3730a3; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
+  
+  .case-card { border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 8px; overflow: hidden; transition: box-shadow 0.2s; }
+  .case-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  
+  .case-header { padding: 14px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+  .case-header:hover { background: #f8fafc; }
+  .case-header.expanded { background: #eff6ff; border-bottom: 1px solid #e5e7eb; }
+  
+  .case-id { font-weight: 700; color: #3b82f6; margin-right: 10px; font-size: 13px; }
+  .case-title { font-size: 13px; color: #1e293b; }
+  .case-meta { color: #94a3b8; font-size: 12px; white-space: nowrap; }
+  
+  .case-body { padding: 16px; background: #fafbfc; }
+  .preconditions { margin-bottom: 12px; padding: 10px 12px; background: #fef9e7; border-radius: 6px; border-left: 3px solid #f59e0b; }
+  .preconditions strong { font-size: 11px; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px; }
+  .preconditions p { font-size: 13px; color: #78350f; margin-top: 4px; }
+  
+  .steps-table { width: 100%; border-collapse: collapse; }
+  .steps-table th { padding: 8px 12px; text-align: left; background: #e2e8f0; font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
+  .steps-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .steps-table tr:last-child td { border-bottom: none; }
+  .step-num { color: #94a3b8; font-weight: 600; width: 40px; }
+  .no-expected { color: #cbd5e1; }
+  
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+  .spinner { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .empty { text-align: center; padding: 40px; color: #94a3b8; }
+
+  .help-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 16px; }
+  .help-toggle { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .help-toggle h3 { font-size: 15px; color: #7c3aed; }
+  .help-content { display: none; margin-top: 16px; }
+  .help-content.visible { display: block; }
+  .help-step { display: flex; gap: 12px; margin-bottom: 14px; }
+  .help-num { width: 28px; height: 28px; background: #7c3aed; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .help-text { font-size: 13px; color: #374151; line-height: 1.6; }
+  .help-text code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #7c3aed; }
+  .help-note { background: #fef3c7; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 12px; color: #92400e; border-left: 3px solid #f59e0b; }
+  
+  .footer { text-align: center; margin-top: 24px; color: #94a3b8; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>TestRail Step Exporter</h1>
+    <p>Export test case steps as clean, readable text — no HTML tags</p>
+  </div>
+
+  <!-- API Key Help Guide -->
+  <div class="help-card">
+    <div class="help-toggle" onclick="toggleHelp()">
+      <h3>How to get your API Key</h3>
+      <span id="helpArrow" style="color:#7c3aed; font-size:14px;">▼</span>
+    </div>
+    <div class="help-content" id="helpContent">
+      <div class="help-step">
+        <div class="help-num">1</div>
+        <div class="help-text">Log in to your TestRail instance (e.g. <code>https://yourcompany.testrail.io</code>)</div>
+      </div>
+      <div class="help-step">
+        <div class="help-num">2</div>
+        <div class="help-text">Click on your <strong>name</strong> in the top right corner (e.g. "Lokesh Nat...")</div>
+      </div>
+      <div class="help-step">
+        <div class="help-num">3</div>
+        <div class="help-text">Select <strong>"My Settings"</strong> from the dropdown menu</div>
+      </div>
+      <div class="help-step">
+        <div class="help-num">4</div>
+        <div class="help-text">Click the <strong>"API KEYS"</strong> tab at the top of the settings page</div>
+      </div>
+      <div class="help-step">
+        <div class="help-num">5</div>
+        <div class="help-text">Click <strong>"Add Key"</strong> and enter a name like <code>Export Steps</code></div>
+      </div>
+      <div class="help-step">
+        <div class="help-num">6</div>
+        <div class="help-text">Click <strong>"Save Configuration"</strong></div>
+      </div>
+      <div class="help-step">
+        <div class="help-num">7</div>
+        <div class="help-text"><strong>Copy the generated API key</strong> and paste it in the field below. Store it somewhere safe — you won't be able to see it again in TestRail.</div>
+      </div>
+      <div class="help-note">
+        <strong>Security tip:</strong> Your API key is never stored by this tool. It's only used for the current session to fetch data. You can delete the key from TestRail after you finish exporting.
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection Card -->
+  <div class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label>TestRail URL</label>
+        <input id="url" type="text" placeholder="https://yourcompany.testrail.io">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input id="email" type="text" placeholder="your.email@company.com">
+      </div>
+      <div class="field" style="grid-column: 1 / -1;">
+        <label>API Key</label>
+        <input id="apikey" type="password" placeholder="Paste your API key here">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-connect" id="connectBtn" onclick="connect()">Connect to TestRail</button>
+    </div>
+    <div id="connectionStatus"></div>
+  </div>
+
+  <!-- Project & Suite Selection (hidden until connected) -->
+  <div class="card" id="selectionCard" style="display:none">
+    <div class="form-grid">
+      <div class="field">
+        <label>Project</label>
+        <select id="projectSelect" onchange="onProjectChange()">
+          <option value="">Select a project...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Suite</label>
+        <select id="suiteSelect" disabled>
+          <option value="">Select a project first...</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="fetchBtn" onclick="fetchCases()" disabled>Fetch Test Cases</button>
+      <button class="btn btn-success" id="csvBtn" onclick="downloadCSV()" style="display:none">Download Clean CSV</button>
+      <button class="btn btn-outline" id="copyBtn" onclick="copyAllSteps()" style="display:none">Copy All Steps</button>
+    </div>
+  </div>
+
+  <div id="error"></div>
+  <div id="results"></div>
+
+  <div class="footer">
+    <p>QA Team — TestRail Export Tool</p>
+  </div>
+</div>
+
+<script>
+let allCases = [];
+let authHeader = "";
+let baseUrl = "";
+let selectedSuiteName = "";
+let selectedProjectName = "";
+
+function toggleHelp() {
+  const el = document.getElementById("helpContent");
+  const arrow = document.getElementById("helpArrow");
+  const visible = el.classList.toggle("visible");
+  arrow.textContent = visible ? "▲" : "▼";
+}
+
+function cleanHtml(text) {
+  if (!text) return "";
+  return text
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractSteps(c) {
+  if (c.custom_steps_separated && c.custom_steps_separated.length > 0) {
+    return c.custom_steps_separated.map((s, i) => ({
+      step: i + 1,
+      action: cleanHtml(s.content),
+      expected: cleanHtml(s.expected)
+    }));
+  }
+  if (c.custom_steps) {
+    const clean = cleanHtml(c.custom_steps);
+    const lines = clean.split(/(?:^|\n)\s*\d+\.\s*/).filter(Boolean);
+    if (lines.length > 1) {
+      return lines.map((l, i) => ({ step: i + 1, action: l.trim(), expected: "" }));
+    }
+    return [{ step: 1, action: clean, expected: "" }];
+  }
+  return [{ step: 1, action: "No steps found", expected: "" }];
+}
+
+function showError(msg) {
+  document.getElementById("error").innerHTML = msg ? `<div class="alert alert-error">${msg}</div>` : "";
+}
+
+async function apiGet(endpoint) {
+  const directUrl = `${baseUrl}/index.php?/api/v2/${endpoint}`;
+  
+  // Try direct first, then fallback to CORS proxies
+  const attempts = [
+    directUrl,
+    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
+  ];
+
+  let lastError = "";
+  for (const url of attempts) {
+    try {
+      const res = await fetch(url, {
+        headers: { "Authorization": authHeader, "Content-Type": "application/json" }
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        lastError = `HTTP ${res.status}: ${errText}`;
+        continue;
+      }
+      return res.json();
+    } catch (e) {
+      lastError = e.message;
+      continue;
+    }
+  }
+  throw new Error(`Connection failed: ${lastError}. Try opening this file on a hosted server instead of locally.`);
+}
+
+async function connect() {
+  const url = document.getElementById("url").value.replace(/\/+$/, "");
+  const email = document.getElementById("email").value;
+  const apiKey = document.getElementById("apikey").value;
+
+  if (!email) { showError("Please enter your email."); return; }
+  if (!apiKey) { showError("Please enter your API key."); return; }
+
+  baseUrl = url;
+  authHeader = "Basic " + btoa(`${email}:${apiKey}`);
+  
+  const btn = document.getElementById("connectBtn");
+  btn.disabled = true;
+  btn.textContent = "Connecting...";
+  showError("");
+
+  try {
+    const data = await apiGet("get_projects");
+    const projects = data.projects || data;
+
+    if (!Array.isArray(projects) || projects.length === 0) {
+      throw new Error("No projects found. Check your credentials.");
+    }
+
+    const select = document.getElementById("projectSelect");
+    select.innerHTML = '<option value="">Select a project...</option>';
+    projects.forEach(p => {
+      if (!p.is_completed) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        select.appendChild(opt);
+      }
+    });
+
+    document.getElementById("selectionCard").style.display = "block";
+    document.getElementById("connectionStatus").innerHTML = `
+      <div class="status">
+        <span class="status-dot connected"></span>
+        <span style="color:#16a34a; font-weight:600;">Connected</span>
+        <span style="color:#64748b;"> — ${projects.length} projects found</span>
+      </div>`;
+
+    btn.textContent = "Connected ✓";
+    btn.style.background = "#16a34a";
+
+  } catch (e) {
+    showError(e.message);
+    document.getElementById("connectionStatus").innerHTML = `
+      <div class="status">
+        <span class="status-dot disconnected"></span>
+        <span style="color:#dc2626; font-weight:600;">Connection failed</span>
+      </div>`;
+    btn.disabled = false;
+    btn.textContent = "Connect to TestRail";
+  }
+}
+
+async function onProjectChange() {
+  const projectId = document.getElementById("projectSelect").value;
+  const suiteSelect = document.getElementById("suiteSelect");
+  const fetchBtn = document.getElementById("fetchBtn");
+
+  selectedProjectName = document.getElementById("projectSelect").selectedOptions[0]?.textContent || "";
+
+  suiteSelect.innerHTML = '<option value="">Loading suites...</option>';
+  suiteSelect.disabled = true;
+  fetchBtn.disabled = true;
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("csvBtn").style.display = "none";
+  document.getElementById("copyBtn").style.display = "none";
+
+  if (!projectId) {
+    suiteSelect.innerHTML = '<option value="">Select a project first...</option>';
+    return;
+  }
+
+  try {
+    const data = await apiGet(`get_suites/${projectId}`);
+    const suites = Array.isArray(data) ? data : [data];
+
+    if (suites.length === 0) {
+      suiteSelect.innerHTML = '<option value="">No suites found</option>';
+      return;
+    }
+
+    suiteSelect.innerHTML = '<option value="">Select a suite...</option>';
+    suites.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = `${s.name} (S${s.id})`;
+      suiteSelect.appendChild(opt);
+    });
+
+    suiteSelect.disabled = false;
+    suiteSelect.onchange = () => {
+      fetchBtn.disabled = !suiteSelect.value;
+      selectedSuiteName = suiteSelect.selectedOptions[0]?.textContent || "";
+    };
+
+  } catch (e) {
+    suiteSelect.innerHTML = '<option value="">Error loading suites</option>';
+    showError(e.message);
+  }
+}
+
+async function fetchCases() {
+  const projectId = document.getElementById("projectSelect").value;
+  const suiteId = document.getElementById("suiteSelect").value;
+
+  if (!projectId || !suiteId) return;
+
+  showError("");
+  document.getElementById("results").innerHTML = '<div class="loading"><div class="spinner"></div>Fetching test cases...</div>';
+  document.getElementById("fetchBtn").disabled = true;
+  document.getElementById("fetchBtn").textContent = "Fetching...";
+
+  try {
+    const data = await apiGet(`get_cases/${projectId}&suite_id=${suiteId}`);
+    allCases = data.cases || data;
+
+    if (!Array.isArray(allCases) || allCases.length === 0) {
+      document.getElementById("results").innerHTML = '<div class="empty">No test cases found for this suite.</div>';
+      return;
+    }
+
+    renderCases();
+    document.getElementById("csvBtn").style.display = "inline-block";
+    document.getElementById("copyBtn").style.display = "inline-block";
+
+  } catch (e) {
+    showError(e.message);
+    document.getElementById("results").innerHTML = "";
+  } finally {
+    document.getElementById("fetchBtn").disabled = false;
+    document.getElementById("fetchBtn").textContent = "Fetch Test Cases";
+  }
+}
+
+function renderCases() {
+  let html = `<div class="results-header">
+    <h2>${selectedProjectName} → ${selectedSuiteName} <span class="badge">${allCases.length} cases</span></h2>
+  </div>`;
+
+  allCases.forEach(c => {
+    const steps = extractSteps(c);
+    const precond = cleanHtml(c.custom_preconds);
+    html += `
+      <div class="case-card">
+        <div class="case-header" id="header-${c.id}" onclick="toggleCase(${c.id})">
+          <div><span class="case-id">C${c.id}</span><span class="case-title">${c.title || ""}</span></div>
+          <span class="case-meta">${steps.length} steps ▼</span>
+        </div>
+        <div class="case-body" id="body-${c.id}" style="display:none">
+          ${precond ? `<div class="preconditions"><strong>Preconditions</strong><p>${precond}</p></div>` : ""}
+          <table class="steps-table">
+            <thead><tr><th>#</th><th>Step Action</th><th>Expected Result</th></tr></thead>
+            <tbody>
+              ${steps.map(s => `
+                <tr>
+                  <td class="step-num">${s.step}</td>
+                  <td>${s.action}</td>
+                  <td>${s.expected || '<span class="no-expected">—</span>'}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  document.getElementById("results").innerHTML = html;
+}
+
+function toggleCase(id) {
+  const body = document.getElementById(`body-${id}`);
+  const header = document.getElementById(`header-${id}`);
+  const isVisible = body.style.display !== "none";
+  body.style.display = isVisible ? "none" : "block";
+  header.classList.toggle("expanded", !isVisible);
+  header.querySelector(".case-meta").textContent = header.querySelector(".case-meta").textContent.replace(/[▼▲]/, isVisible ? "▼" : "▲");
+}
+
+function downloadCSV() {
+  let csv = "ID,Title,Step Number,Step Action,Expected Result,Preconditions\n";
+  allCases.forEach(c => {
+    const steps = extractSteps(c);
+    const precond = cleanHtml(c.custom_preconds);
+    steps.forEach(s => {
+      csv += [
+        `C${c.id}`,
+        `"${(c.title || "").replace(/"/g, '""')}"`,
+        s.step,
+        `"${(s.action || "").replace(/"/g, '""')}"`,
+        `"${(s.expected || "").replace(/"/g, '""')}"`,
+        `"${precond.replace(/"/g, '""')}"`
+      ].join(",") + "\n";
+    });
+  });
+
+  const suiteName = selectedSuiteName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `testrail_${suiteName}_steps.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function copyAllSteps() {
+  let text = `Project: ${selectedProjectName}\nSuite: ${selectedSuiteName}\n`;
+  allCases.forEach(c => {
+    const steps = extractSteps(c);
+    text += `\n${"=".repeat(70)}\nC${c.id}: ${c.title}\n${"=".repeat(70)}\n`;
+    const precond = cleanHtml(c.custom_preconds);
+    if (precond) text += `\nPreconditions: ${precond}\n`;
+    text += "\nSteps:\n";
+    steps.forEach(s => {
+      text += `  ${s.step}. ${s.action}\n`;
+      if (s.expected) text += `     Expected: ${s.expected}\n`;
+    });
+  });
+
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy All Steps"; }, 2000);
+  });
+}
+</script>
+
+</body>
+</html>
