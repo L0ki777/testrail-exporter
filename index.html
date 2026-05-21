@@ -249,17 +249,18 @@
         <input type="file" id="csvFileInput" accept=".csv" onchange="onFileSelected(event)">
       </div>
 
-      <!-- Detected format info -->
-      <div class="import-detected" id="importDetected" style="display:none">
-        <span style="font-size:16px;">&#10003;</span>
-        <span id="importDetectedText"></span>
-      </div>
+      <!-- Destination selectors — always visible once connected -->
+      <div class="import-dest">
+        <div style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Import destination</div>
 
-      <!-- Destination selectors -->
-      <div class="import-dest" id="importDest" style="display:none">
-        <label>Import into Suite</label>
-        <select id="importSuiteSelect" onchange="onImportSuiteChange()">
-          <option value="">Select a suite...</option>
+        <label>Project</label>
+        <select id="importProjectSelect" onchange="onImportProjectChange()">
+          <option value="">Select a project...</option>
+        </select>
+
+        <label>Suite</label>
+        <select id="importSuiteSelect" disabled onchange="onImportSuiteChange()">
+          <option value="">Select a project first...</option>
         </select>
 
         <label>Section</label>
@@ -271,6 +272,12 @@
         <select id="importSubsectionSelect" disabled>
           <option value="">None — import into section above</option>
         </select>
+      </div>
+
+      <!-- Detected format info -->
+      <div class="import-detected" id="importDetected" style="display:none;margin-top:14px;">
+        <span style="font-size:16px;">&#10003;</span>
+        <span id="importDetectedText"></span>
       </div>
 
       <!-- Preview table -->
@@ -302,6 +309,7 @@
 
 <script>
 let allCases = [];
+let allProjects = [];
 let authHeader = "";
 let baseUrl = "";
 let selectedSuiteName = "";
@@ -447,15 +455,15 @@ async function connect() {
       throw new Error("No projects found. Check your credentials.");
     }
 
+    allProjects = projects.filter(p => !p.is_completed);
+
     const select = document.getElementById("projectSelect");
     select.innerHTML = '<option value="">Select a project...</option>';
-    projects.forEach(p => {
-      if (!p.is_completed) {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = p.name;
-        select.appendChild(opt);
-      }
+    allProjects.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      select.appendChild(opt);
     });
 
     document.getElementById("selectionCard").style.display = "block";
@@ -895,9 +903,8 @@ function processFile(file) {
     document.getElementById("importDetected").style.display = "flex";
 
     renderPreview();
-    populateImportSuites();
-    document.getElementById("importDest").style.display = "block";
     document.getElementById("importPreview").style.display = "block";
+    updateImportBtn();
   };
   reader.readAsText(file);
 }
@@ -918,18 +925,46 @@ function renderPreview() {
 
 function esc(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-function populateImportSuites() {
-  importProjectId = document.getElementById("projectSelect").value;
-  const suiteSelect = document.getElementById("importSuiteSelect");
-  suiteSelect.innerHTML = '<option value="">Select a suite...</option>';
-  const exportSuiteSelect = document.getElementById("suiteSelect");
-  Array.from(exportSuiteSelect.options).forEach(opt => {
-    if (opt.value) {
-      const o = document.createElement("option");
-      o.value = opt.value; o.textContent = opt.textContent;
-      suiteSelect.appendChild(o);
-    }
+function populateImportProjects() {
+  const sel = document.getElementById("importProjectSelect");
+  sel.innerHTML = '<option value="">Select a project...</option>';
+  allProjects.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id; opt.textContent = p.name;
+    sel.appendChild(opt);
   });
+}
+
+async function onImportProjectChange() {
+  importProjectId = document.getElementById("importProjectSelect").value;
+  const suiteSelect  = document.getElementById("importSuiteSelect");
+  const secSel       = document.getElementById("importSectionSelect");
+  const subSel       = document.getElementById("importSubsectionSelect");
+  suiteSelect.innerHTML = '<option value="">Loading suites...</option>';
+  suiteSelect.disabled = true;
+  secSel.innerHTML = '<option value="">Select a suite first...</option>';
+  secSel.disabled = true;
+  subSel.innerHTML = '<option value="">None — import into section above</option>';
+  subSel.disabled = true;
+  document.getElementById("importBtnRow").style.display = "none";
+
+  if (!importProjectId) { suiteSelect.innerHTML = '<option value="">Select a project first...</option>'; return; }
+
+  try {
+    const data = await apiGet(`get_suites/${importProjectId}`);
+    const suites = Array.isArray(data) ? data : (data.suites ? data.suites : [data]);
+    suiteSelect.innerHTML = '<option value="">Select a suite...</option>';
+    suites.forEach(s => {
+      if (s && s.name) {
+        const opt = document.createElement("option");
+        opt.value = s.id; opt.textContent = s.name;
+        suiteSelect.appendChild(opt);
+      }
+    });
+    suiteSelect.disabled = false;
+  } catch (e) {
+    suiteSelect.innerHTML = '<option value="">Error loading suites</option>';
+  }
 }
 
 async function onImportSuiteChange() {
@@ -1044,6 +1079,7 @@ async function runImport() {
 // Show import card once connected (called from connect())
 function showImportCard() {
   document.getElementById("importCard").style.display = "block";
+  populateImportProjects();
 }
 
 function copyAllSteps() {
