@@ -93,6 +93,45 @@
   .help-note { background: #fef3c7; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 12px; color: #92400e; border-left: 3px solid #f59e0b; }
 
   .footer { text-align: center; margin-top: 24px; color: #94a3b8; font-size: 12px; }
+
+  /* Import card */
+  .import-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; overflow: hidden; }
+  .import-toggle { padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; border-bottom: 1px solid transparent; }
+  .import-toggle:hover { background: #f8fafc; }
+  .import-toggle.open { border-bottom-color: #e5e7eb; }
+  .import-toggle h3 { font-size: 15px; color: #0f766e; font-weight: 700; }
+  .import-body { display: none; padding: 20px; }
+  .import-body.open { display: block; }
+
+  .drop-zone { border: 2px dashed #d1d5db; border-radius: 10px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: #f9fafb; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #0f766e; background: #f0fdfa; }
+  .drop-zone p { color: #64748b; font-size: 14px; margin-top: 8px; }
+  .drop-zone .drop-icon { font-size: 32px; }
+  .drop-zone input[type="file"] { display: none; }
+
+  .import-detected { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 14px; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; font-size: 13px; color: #0f766e; }
+  .import-detected strong { font-weight: 700; }
+
+  .import-dest { margin-top: 16px; }
+  .import-dest label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .import-dest select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; background: #fff; margin-bottom: 10px; }
+  .import-dest select:disabled { background: #f3f4f6; color: #9ca3af; }
+
+  .preview-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+  .preview-table th { background: #e2e8f0; padding: 7px 10px; text-align: left; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; }
+  .preview-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #374151; }
+  .preview-table tr:last-child td { border-bottom: none; }
+
+  .import-progress { margin-top: 14px; }
+  .progress-bar-wrap { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 8px 0; }
+  .progress-bar-fill { height: 100%; background: #0f766e; border-radius: 4px; transition: width 0.2s; width: 0%; }
+  .progress-label { font-size: 13px; color: #475569; }
+  .import-result { margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
+  .import-result.success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+  .import-result.partial { background: #fefce8; border: 1px solid #fde68a; color: #92400e; }
+
+  .btn-import { background: #0f766e; color: #fff; }
+  .btn-import:hover:not(:disabled) { background: #0d6157; }
 </style>
 </head>
 <body>
@@ -100,7 +139,7 @@
 <div class="container">
   <div class="header">
     <h1>TestRail Step Exporter</h1>
-    <p>Export test case steps as clean, readable text — no HTML tags</p>
+    <p>Export &amp; import TestRail test cases — clean, formatted, no HTML tags</p>
   </div>
 
   <!-- API Key Help Guide -->
@@ -192,6 +231,69 @@
 
   <div id="error"></div>
   <div id="results"></div>
+
+  <!-- Import Card (shown after connection) -->
+  <div class="import-card" id="importCard" style="display:none">
+    <div class="import-toggle" id="importToggle" onclick="toggleImport()">
+      <h3>&#8593; Import Test Cases from CSV</h3>
+      <span id="importArrow" style="color:#0f766e; font-size:14px;">▼</span>
+    </div>
+    <div class="import-body" id="importBody">
+
+      <!-- Drop zone -->
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('csvFileInput').click()"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="drop-icon">&#128193;</div>
+        <strong style="font-size:14px;color:#1e293b;">Drag &amp; drop a CSV file here</strong>
+        <p>or click to browse &mdash; supports TestRail import format &amp; export format</p>
+        <input type="file" id="csvFileInput" accept=".csv" onchange="onFileSelected(event)">
+      </div>
+
+      <!-- Detected format info -->
+      <div class="import-detected" id="importDetected" style="display:none">
+        <span style="font-size:16px;">&#10003;</span>
+        <span id="importDetectedText"></span>
+      </div>
+
+      <!-- Destination selectors -->
+      <div class="import-dest" id="importDest" style="display:none">
+        <label>Import into Suite</label>
+        <select id="importSuiteSelect" onchange="onImportSuiteChange()">
+          <option value="">Select a suite...</option>
+        </select>
+
+        <label>Section</label>
+        <select id="importSectionSelect" disabled onchange="onImportSectionChange()">
+          <option value="">Select a suite first...</option>
+        </select>
+
+        <label>Subsection <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+        <select id="importSubsectionSelect" disabled>
+          <option value="">None — import into section above</option>
+        </select>
+      </div>
+
+      <!-- Preview table -->
+      <div id="importPreview" style="display:none">
+        <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 6px;">Preview (first 5 rows)</div>
+        <div style="overflow-x:auto">
+          <table class="preview-table" id="previewTable"></table>
+        </div>
+      </div>
+
+      <!-- Import button + progress -->
+      <div class="btn-row" id="importBtnRow" style="display:none">
+        <button class="btn btn-import" id="importBtn" onclick="runImport()">Import</button>
+      </div>
+
+      <div class="import-progress" id="importProgress" style="display:none">
+        <div class="progress-label" id="progressLabel">Importing…</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
+      </div>
+      <div id="importResult"></div>
+
+    </div>
+  </div>
 
   <div class="footer">
     <p>QA Team — TestRail Export Tool</p>
@@ -357,6 +459,7 @@ async function connect() {
     });
 
     document.getElementById("selectionCard").style.display = "block";
+    showImportCard();
     document.getElementById("connectionStatus").innerHTML = `
       <div class="status">
         <span class="status-dot connected"></span>
@@ -646,6 +749,301 @@ function downloadCSV() {
   link.download = `${getFilenameBase()}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
+}
+
+// ── Import feature ──────────────────────────────────────────────────────────
+
+let importedRows = [];
+let importFormat = "";
+let allSections  = [];
+let importProjectId = "";
+
+const TYPE_MAP     = { functional:1, acceptance:2, automated:3, smoke:5, manual:6 };
+const PRIORITY_MAP = { low:1, medium:2, high:3, critical:4 };
+
+async function apiPost(endpoint, body) {
+  const directUrl = `${baseUrl}/index.php?/api/v2/${endpoint}`;
+  const opts = {
+    method: "POST",
+    headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  };
+  const proxies = [
+    directUrl,
+    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
+  ];
+  let lastError = "";
+  for (const url of proxies) {
+    try {
+      const res = await fetch(url, opts);
+      if (!res.ok) { lastError = `HTTP ${res.status}`; continue; }
+      return res.json();
+    } catch (e) { lastError = e.message; }
+  }
+  throw new Error(lastError);
+}
+
+function toggleImport() {
+  const body  = document.getElementById("importBody");
+  const arrow = document.getElementById("importArrow");
+  const toggle = document.getElementById("importToggle");
+  const open = body.classList.toggle("open");
+  toggle.classList.toggle("open", open);
+  arrow.textContent = open ? "▲" : "▼";
+}
+
+function onDragOver(e) { e.preventDefault(); document.getElementById("dropZone").classList.add("drag-over"); }
+function onDragLeave()  { document.getElementById("dropZone").classList.remove("drag-over"); }
+function onDrop(e)      { e.preventDefault(); onDragLeave(); processFile(e.dataTransfer.files[0]); }
+function onFileSelected(e) { processFile(e.target.files[0]); }
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = splitCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+  const rows = lines.slice(1).map(l => {
+    const vals = splitCSVLine(l);
+    const row = {};
+    headers.forEach((h, i) => { row[h] = (vals[i] || "").trim(); });
+    return row;
+  }).filter(r => Object.values(r).some(v => v));
+  return { headers, rows };
+}
+
+function splitCSVLine(line) {
+  const result = [];
+  let cur = "", inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if (ch === ',' && !inQuote) {
+      result.push(cur); cur = "";
+    } else cur += ch;
+  }
+  result.push(cur);
+  return result;
+}
+
+function detectFormat(headers) {
+  if (headers.includes("section")) return "testrail";
+  if (headers.includes("case id") || headers.includes("suite")) return "export";
+  return "unknown";
+}
+
+function normaliseRow(row, format) {
+  if (format === "testrail") {
+    return {
+      title:       row["title"]            || "",
+      steps:       row["steps"]            || "",
+      expected:    row["expected result"]  || "",
+      precond:     row["preconditions"]    || "",
+      references:  row["references"]       || "",
+      type:        row["type"]             || "",
+      priority:    row["priority"]         || ""
+    };
+  }
+  // export format: steps are one-per-row; group by title later
+  return {
+    title:       row["title"]            || "",
+    steps:       row["step"]             || row["steps"] || "",
+    expected:    row["expected result"]  || "",
+    precond:     row["preconditions"]    || "",
+    references:  row["requirements"]     || "",
+    type:        "",
+    priority:    ""
+  };
+}
+
+function groupExportRows(rows) {
+  const cases = [];
+  let cur = null;
+  rows.forEach(r => {
+    if (!cur || r["title"] !== cur.title) {
+      if (cur) cases.push(cur);
+      cur = { title: r["title"], steps: [], expected: "", precond: r["preconditions"] || "", references: r["requirements"] || "", type: "", priority: "" };
+    }
+    if (r["step"] || r["steps"]) cur.steps.push((r["step"] || r["steps"]).trim());
+    if (r["expected result"]) cur.expected = r["expected result"];
+  });
+  if (cur) cases.push(cur);
+  return cases.map(c => ({ ...c, steps: c.steps.join("\n"), stepsArray: c.steps }));
+}
+
+function processFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const { headers, rows } = parseCSV(e.target.result);
+    importFormat = detectFormat(headers);
+    if (importFormat === "unknown") {
+      alert("Could not detect CSV format. Ensure it has a Title column and either Section (TestRail format) or Suite/Case ID (export format).");
+      return;
+    }
+
+    if (importFormat === "export") {
+      importedRows = groupExportRows(rows);
+    } else {
+      importedRows = rows.map(r => normaliseRow(r, importFormat));
+    }
+
+    const fmtLabel = importFormat === "testrail" ? "TestRail import format" : "Export format";
+    document.getElementById("importDetectedText").innerHTML =
+      `<strong>Detected:</strong> ${fmtLabel} &nbsp;•&nbsp; <strong>${importedRows.length}</strong> test cases`;
+    document.getElementById("importDetected").style.display = "flex";
+
+    renderPreview();
+    populateImportSuites();
+    document.getElementById("importDest").style.display = "block";
+    document.getElementById("importPreview").style.display = "block";
+  };
+  reader.readAsText(file);
+}
+
+function renderPreview() {
+  const sample = importedRows.slice(0, 5);
+  const table = document.getElementById("previewTable");
+  table.innerHTML = `
+    <thead><tr><th>Title</th><th>Steps (preview)</th><th>Expected Result</th></tr></thead>
+    <tbody>
+      ${sample.map(r => `<tr>
+        <td title="${esc(r.title)}">${esc(r.title.substring(0,60))}${r.title.length>60?"…":""}</td>
+        <td title="${esc(r.steps)}">${esc(r.steps.substring(0,80))}${r.steps.length>80?"…":""}</td>
+        <td title="${esc(r.expected)}">${esc(r.expected.substring(0,60))}${r.expected.length>60?"…":""}</td>
+      </tr>`).join("")}
+    </tbody>`;
+}
+
+function esc(s) { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function populateImportSuites() {
+  importProjectId = document.getElementById("projectSelect").value;
+  const suiteSelect = document.getElementById("importSuiteSelect");
+  suiteSelect.innerHTML = '<option value="">Select a suite...</option>';
+  const exportSuiteSelect = document.getElementById("suiteSelect");
+  Array.from(exportSuiteSelect.options).forEach(opt => {
+    if (opt.value) {
+      const o = document.createElement("option");
+      o.value = opt.value; o.textContent = opt.textContent;
+      suiteSelect.appendChild(o);
+    }
+  });
+}
+
+async function onImportSuiteChange() {
+  const suiteId = document.getElementById("importSuiteSelect").value;
+  const secSel  = document.getElementById("importSectionSelect");
+  const subSel  = document.getElementById("importSubsectionSelect");
+  secSel.innerHTML = '<option value="">Loading sections...</option>';
+  secSel.disabled = true;
+  subSel.innerHTML = '<option value="">None — import into section above</option>';
+  subSel.disabled = true;
+  document.getElementById("importBtnRow").style.display = "none";
+
+  if (!suiteId || !importProjectId) return;
+
+  try {
+    const data = await apiGet(`get_sections/${importProjectId}&suite_id=${suiteId}`);
+    allSections = data.sections || (Array.isArray(data) ? data : []);
+    secSel.innerHTML = '<option value="">Select a section...</option>';
+    allSections.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = "—".repeat(s.depth || 0) + " " + s.name;
+      secSel.appendChild(opt);
+    });
+    secSel.disabled = false;
+  } catch (e) {
+    secSel.innerHTML = '<option value="">Error loading sections</option>';
+  }
+}
+
+function onImportSectionChange() {
+  const parentId = document.getElementById("importSectionSelect").value;
+  const subSel   = document.getElementById("importSubsectionSelect");
+  subSel.innerHTML = '<option value="">None — import into section above</option>';
+  subSel.disabled = true;
+
+  if (!parentId) { document.getElementById("importBtnRow").style.display = "none"; return; }
+
+  const children = allSections.filter(s => String(s.parent_id) === String(parentId));
+  if (children.length) {
+    children.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id; opt.textContent = s.name;
+      subSel.appendChild(opt);
+    });
+    subSel.disabled = false;
+  }
+
+  updateImportBtn();
+}
+
+function updateImportBtn() {
+  const btnRow = document.getElementById("importBtnRow");
+  const secVal = document.getElementById("importSectionSelect").value;
+  if (secVal && importedRows.length) {
+    document.getElementById("importBtn").textContent = `Import ${importedRows.length} Case${importedRows.length!==1?"s":""}`;
+    btnRow.style.display = "flex";
+  }
+}
+
+async function runImport() {
+  const subVal = document.getElementById("importSubsectionSelect").value;
+  const secVal = document.getElementById("importSectionSelect").value;
+  const sectionId = subVal || secVal;
+  if (!sectionId) { alert("Please select a section to import into."); return; }
+
+  document.getElementById("importBtn").disabled = true;
+  document.getElementById("importProgress").style.display = "block";
+  document.getElementById("importResult").innerHTML = "";
+
+  let done = 0, failed = 0;
+  const errors = [];
+  const total = importedRows.length;
+
+  for (const row of importedRows) {
+    const payload = { title: row.title || "Untitled" };
+    if (row.steps)      payload.custom_steps    = row.steps;
+    if (row.expected)   payload.custom_expected  = row.expected;
+    if (row.precond)    payload.custom_preconds  = row.precond;
+    if (row.references) payload.custom_requirements = row.references;
+    if (row.type) {
+      const tid = TYPE_MAP[row.type.toLowerCase()];
+      if (tid) payload.type_id = tid;
+    }
+    if (row.priority) {
+      const pid = PRIORITY_MAP[row.priority.toLowerCase()];
+      if (pid) payload.priority_id = pid;
+    }
+
+    try {
+      await apiPost(`add_case/${sectionId}`, payload);
+      done++;
+    } catch (e) {
+      failed++;
+      errors.push(`Row ${done+failed}: ${e.message}`);
+    }
+
+    const pct = Math.round(((done + failed) / total) * 100);
+    document.getElementById("progressFill").style.width = pct + "%";
+    document.getElementById("progressLabel").textContent = `Importing ${done + failed} / ${total}…`;
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  document.getElementById("importBtn").disabled = false;
+  const cls = failed === 0 ? "success" : "partial";
+  let msg = `&#10003; Done: <strong>${done}</strong> imported`;
+  if (failed) msg += `, <strong>${failed}</strong> failed<br><small style="color:#92400e">${errors.slice(0,3).join("<br>")}</small>`;
+  document.getElementById("importResult").innerHTML = `<div class="import-result ${cls}">${msg}</div>`;
+  document.getElementById("progressLabel").textContent = "Complete";
+}
+
+// Show import card once connected (called from connect())
+function showImportCard() {
+  document.getElementById("importCard").style.display = "block";
 }
 
 function copyAllSteps() {
