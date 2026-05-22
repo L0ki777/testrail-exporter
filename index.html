@@ -206,6 +206,10 @@
         <div class="help-num">7</div>
         <div class="help-text"><strong>Copy the generated API key</strong> and paste it in the field below.</div>
       </div>
+      <div class="help-step">
+        <div class="help-num">8</div>
+        <div class="help-text"><strong>(For Import) Run a local CORS proxy</strong> &mdash; install once with <code>npm i -g local-cors-proxy</code>, then run <code>lcp --proxyUrl https://yourcompany.testrail.io</code> and paste <code>http://localhost:8010/proxy</code> into the CORS Proxy field above.</div>
+      </div>
       <div class="help-note">
         <strong>Security tip:</strong> Your API key is never stored by this tool. It's only used for the current session to fetch data.
       </div>
@@ -226,6 +230,10 @@
       <div class="field" style="grid-column: 1 / -1;">
         <label>API Key</label>
         <input id="apikey" type="password" placeholder="Paste your API key here">
+      </div>
+      <div class="field" style="grid-column: 1 / -1;">
+        <label>CORS Proxy URL <span style="font-weight:400;color:#94a3b8;text-transform:none;">(optional &mdash; required for Import. e.g. http://localhost:8010/proxy)</span></label>
+        <input id="corsProxy" type="text" placeholder="http://localhost:8010/proxy   or   https://proxy.cors.sh/">
       </div>
     </div>
     <div class="btn-row">
@@ -410,8 +418,22 @@ let allCases = [];
 let allProjects = [];
 let authHeader = "";
 let baseUrl = "";
+let corsProxy = "";
 let selectedSuiteName = "";
 let selectedProjectName = "";
+
+function buildAttempts(directUrl) {
+  const attempts = [];
+  if (corsProxy) {
+    const sep = corsProxy.endsWith("/") ? "" : "/";
+    if (corsProxy.includes("?")) attempts.push(corsProxy + encodeURIComponent(directUrl));
+    else attempts.push(corsProxy + sep + directUrl);
+  }
+  attempts.push(directUrl);
+  attempts.push(`https://corsproxy.io/?${encodeURIComponent(directUrl)}`);
+  attempts.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`);
+  return attempts;
+}
 
 function toggleHelp() {
   const el = document.getElementById("helpContent");
@@ -503,11 +525,7 @@ function showError(msg) {
 
 async function apiGet(endpoint) {
   const directUrl = `${baseUrl}/index.php?/api/v2/${endpoint}`;
-  const attempts = [
-    directUrl,
-    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
-  ];
+  const attempts = buildAttempts(directUrl);
 
   let lastError = "";
   for (const url of attempts) {
@@ -542,8 +560,16 @@ async function connect() {
   if (!email) { showError("Please enter your email."); return; }
   if (!apiKey) { showError("Please enter your API key."); return; }
 
-  baseUrl = url;
+  baseUrl    = url;
+  corsProxy  = document.getElementById("corsProxy").value.trim().replace(/\/+$/, "");
   authHeader = "Basic " + btoa(`${email}:${apiKey}`);
+
+  // Persist non-sensitive fields for next visit
+  try {
+    localStorage.setItem("testrail_url",        url);
+    localStorage.setItem("testrail_email",      email);
+    localStorage.setItem("testrail_cors_proxy", corsProxy);
+  } catch {}
 
   const btn = document.getElementById("connectBtn");
   btn.disabled = true;
@@ -911,27 +937,15 @@ const PRIORITY_MAP = { low:1, medium:2, high:3, critical:4 };
 async function apiPost(endpoint, body) {
   const directUrl  = `${baseUrl}/index.php?/api/v2/${endpoint}`;
   const jsonBody   = JSON.stringify(body);
-
-  // Proxy attempts for POST — allorigins is GET-only and removed.
-  // cors-anywhere supports POST with Authorization headers.
-  // corsproxy.io works when the server allows the Origin header it injects.
-  const attempts = [
-    // 1. Direct (works when TestRail has CORS enabled for this origin, or same-origin)
-    { url: directUrl, headers: { "Authorization": authHeader, "Content-Type": "application/json" } },
-    // 2. cors-anywhere — explicitly built for POST + Authorization forwarding
-    { url: `https://cors-anywhere.herokuapp.com/${directUrl}`,
-      headers: { "Authorization": authHeader, "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" } },
-    // 3. corsproxy.io — works for many TestRail instances
-    { url: `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
-      headers: { "Authorization": authHeader, "Content-Type": "application/json" } },
-  ];
+  const attempts   = buildAttempts(directUrl);
+  const headers    = { "Authorization": authHeader, "Content-Type": "application/json" };
 
   let lastError = "";
-  for (const attempt of attempts) {
+  for (const url of attempts) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(attempt.url, { method: "POST", headers: attempt.headers, body: jsonBody, signal: controller.signal });
+      const res = await fetch(url, { method: "POST", headers, body: jsonBody, signal: controller.signal });
       clearTimeout(timer);
       if (!res.ok) { lastError = `HTTP ${res.status}`; continue; }
       return res.json();
@@ -940,8 +954,8 @@ async function apiPost(endpoint, body) {
       lastError = e.name === "AbortError" ? `Timed out` : e.message;
     }
   }
-  throw new Error(`Import failed — all CORS proxies rejected the POST request. ${lastError}. ` +
-    `Try visiting https://cors-anywhere.herokuapp.com/corsdemo and clicking "Request temporary access", then retry.`);
+  throw new Error(`Import failed: ${lastError}. ` +
+    `Make sure your CORS Proxy URL is set (e.g. http://localhost:8010/proxy after running 'lcp --proxyUrl https://yourcompany.testrail.io').`);
 }
 
 function toggleImport() {
@@ -1460,6 +1474,18 @@ function copyAllSteps() {
     setTimeout(() => { btn.textContent = "Copy All Steps"; }, 2000);
   });
 }
+
+// Restore saved connection fields on page load
+(function restoreSavedFields() {
+  try {
+    const savedUrl   = localStorage.getItem("testrail_url");
+    const savedEmail = localStorage.getItem("testrail_email");
+    const savedProxy = localStorage.getItem("testrail_cors_proxy");
+    if (savedUrl)   document.getElementById("url").value       = savedUrl;
+    if (savedEmail) document.getElementById("email").value     = savedEmail;
+    if (savedProxy) document.getElementById("corsProxy").value = savedProxy;
+  } catch {}
+})();
 </script>
 
 </body>
