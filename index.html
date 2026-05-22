@@ -132,6 +132,35 @@
 
   .btn-import { background: #0f766e; color: #fff; }
   .btn-import:hover:not(:disabled) { background: #0d6157; }
+
+  .mapping-table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+  .mapping-table th { background: #f1f5f9; padding: 7px 12px; text-align: left; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 2px solid #e2e8f0; }
+  .mapping-table td { padding: 6px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .mapping-table tr:last-child td { border-bottom: none; }
+  .mapping-table select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; background: #fff; width: 100%; }
+  .mapping-table select:focus { outline: none; border-color: #0f766e; box-shadow: 0 0 0 2px rgba(15,118,110,0.15); }
+  .mapping-table .csv-col { color: #1e293b; font-weight: 500; font-family: monospace; font-size: 12px; }
+  .mapping-section-label { font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 0; }
+
+  /* Section tree */
+  .section-tree { border: 1px solid #d1d5db; border-radius: 8px; max-height: 200px; overflow-y: auto; background: #fff; margin-bottom: 10px; }
+  .section-tree-item { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: pointer; font-size: 13px; color: #374151; border-bottom: 1px solid #f1f5f9; }
+  .section-tree-item:last-child { border-bottom: none; }
+  .section-tree-item:hover { background: #f0fdfa; }
+  .section-tree-item.selected { background: #ccfbf1; color: #0f766e; font-weight: 600; }
+  .section-tree-empty { padding: 14px; color: #94a3b8; font-size: 13px; text-align: center; }
+
+  /* Advanced CSV options */
+  .adv-opts { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .adv-opts-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .adv-opts-grid .field label { font-size: 11px; }
+  .adv-opts-grid input[type="text"], .adv-opts-grid input[type="number"], .adv-opts-grid select { padding: 7px 10px; font-size: 13px; }
+  .adv-toggle { font-size: 12px; font-weight: 600; color: #475569; cursor: pointer; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .adv-toggle:hover { color: #0f766e; }
+
+  /* Cancel button */
+  .btn-cancel { background: #fff; color: #dc2626; border: 1px solid #fca5a5; }
+  .btn-cancel:hover:not(:disabled) { background: #fef2f2; }
 </style>
 </head>
 <body>
@@ -220,6 +249,12 @@
           <option value="">Select a project first...</option>
         </select>
       </div>
+      <div class="field" style="grid-column: 1 / -1;">
+        <label>Section <span style="font-weight:400;color:#94a3b8;">(optional — leave blank to fetch all)</span></label>
+        <select id="sectionFilterSelect" disabled>
+          <option value="">All sections</option>
+        </select>
+      </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" id="fetchBtn" onclick="fetchCases()" disabled>Fetch Test Cases</button>
@@ -239,6 +274,35 @@
       <span id="importArrow" style="color:#0f766e; font-size:14px;">▼</span>
     </div>
     <div class="import-body" id="importBody">
+
+      <!-- Advanced CSV options -->
+      <div class="adv-opts">
+        <div class="adv-toggle" onclick="toggleAdvOpts()">
+          <span id="advOptsArrow">▶</span> Advanced CSV Options
+        </div>
+        <div id="advOptsBody" style="display:none">
+          <div class="adv-opts-grid">
+            <div class="field">
+              <label>CSV Delimiter</label>
+              <input type="text" id="csvDelimiter" value="," maxlength="2" placeholder=", or ; or \t">
+            </div>
+            <div class="field">
+              <label>Start Row</label>
+              <input type="number" id="startRow" value="1" min="1" style="width:80px;">
+              &nbsp;<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;text-transform:none;letter-spacing:0;margin-top:4px;">
+                <input type="checkbox" id="isHeaderRow" checked> Is header row
+              </label>
+            </div>
+            <div class="field">
+              <label>Template</label>
+              <select id="templateSelect">
+                <option value="1">Test Case (Text)</option>
+                <option value="2">Test Case (Steps)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Drop zone -->
       <div class="drop-zone" id="dropZone" onclick="document.getElementById('csvFileInput').click()"
@@ -263,21 +327,52 @@
           <option value="">Select a project first...</option>
         </select>
 
-        <label>Section</label>
-        <select id="importSectionSelect" disabled onchange="onImportSectionChange()">
-          <option value="">Select a suite first...</option>
-        </select>
-
-        <label>Subsection <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
-        <select id="importSubsectionSelect" disabled>
-          <option value="">None — import into section above</option>
-        </select>
+        <label>Import To</label>
+        <div id="sectionTree" class="section-tree">
+          <div class="section-tree-empty">Select a suite first...</div>
+        </div>
       </div>
 
       <!-- Detected format info -->
       <div class="import-detected" id="importDetected" style="display:none;margin-top:14px;">
         <span style="font-size:16px;">&#10003;</span>
         <span id="importDetectedText"></span>
+      </div>
+
+      <!-- Column mapping -->
+      <div id="importMapping" style="display:none">
+        <!-- Row Layout -->
+        <div class="mapping-section-label" style="margin-top:16px;">Row Layout</div>
+        <div style="margin:10px 0 14px;display:flex;flex-direction:column;gap:8px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;cursor:pointer;">
+            <input type="radio" name="rowLayout" id="rowSingle" value="single" checked onchange="renderPreview()">
+            Test cases use a single row
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;cursor:pointer;">
+            <input type="radio" name="rowLayout" id="rowMultiple" value="multiple" onchange="renderPreview()">
+            Test cases use multiple rows
+            <span style="font-size:12px;color:#94a3b8;">(group rows with the same Title into one case)</span>
+          </label>
+        </div>
+
+        <!-- Mapping table -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div class="mapping-section-label" style="margin-top:0;">Column Mapping</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="saveMapping()">&#8595; Save mapping</button>
+            <button class="btn btn-outline" style="padding:5px 12px;font-size:12px;" onclick="document.getElementById('mappingJsonInput').click()">&#8593; Load mapping</button>
+            <input type="file" id="mappingJsonInput" accept=".json" style="display:none" onchange="loadMapping(event)">
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="mapping-table" id="mappingTable"></table>
+        </div>
+
+        <!-- Ignore empty titles -->
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;margin-top:12px;cursor:pointer;">
+          <input type="checkbox" id="ignoreNoTitle" checked>
+          Ignore test cases/records without a title (e.g. empty rows at file end)
+        </label>
       </div>
 
       <!-- Preview table -->
@@ -294,7 +389,10 @@
       </div>
 
       <div class="import-progress" id="importProgress" style="display:none">
-        <div class="progress-label" id="progressLabel">Importing…</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div class="progress-label" id="progressLabel">Importing…</div>
+          <button class="btn btn-cancel" id="cancelImportBtn" onclick="cancelImport()" style="padding:4px 14px;font-size:12px;">✕ Cancel</button>
+        </div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
       </div>
       <div id="importResult"></div>
@@ -504,6 +602,8 @@ async function onProjectChange() {
   document.getElementById("excelBtn").style.display = "none";
   document.getElementById("csvBtn").style.display = "none";
   document.getElementById("copyBtn").style.display = "none";
+  document.getElementById("sectionFilterSelect").innerHTML = '<option value="">All sections</option>';
+  document.getElementById("sectionFilterSelect").disabled = true;
 
   if (!projectId) {
     suiteSelect.innerHTML = '<option value="">Select a project first...</option>';
@@ -530,9 +630,25 @@ async function onProjectChange() {
     });
 
     suiteSelect.disabled = false;
-    suiteSelect.onchange = () => {
+    suiteSelect.onchange = async () => {
       fetchBtn.disabled = !suiteSelect.value;
       selectedSuiteName = suiteSelect.selectedOptions[0]?.textContent || "";
+      // Load section filter for export
+      const secFilter = document.getElementById("sectionFilterSelect");
+      secFilter.innerHTML = '<option value="">All sections</option>';
+      secFilter.disabled = true;
+      if (!suiteSelect.value) return;
+      try {
+        const d = await apiGet(`get_sections/${projectId}&suite_id=${suiteSelect.value}`);
+        const secs = d.sections || (Array.isArray(d) ? d : []);
+        secs.forEach(s => {
+          const o = document.createElement("option");
+          o.value = s.id;
+          o.textContent = "—".repeat(s.depth || 0) + " " + s.name;
+          secFilter.appendChild(o);
+        });
+        secFilter.disabled = false;
+      } catch {}
     };
 
   } catch (e) {
@@ -542,8 +658,9 @@ async function onProjectChange() {
 }
 
 async function fetchCases() {
-  const projectId = document.getElementById("projectSelect").value;
-  const suiteId = document.getElementById("suiteSelect").value;
+  const projectId  = document.getElementById("projectSelect").value;
+  const suiteId    = document.getElementById("suiteSelect").value;
+  const sectionId  = document.getElementById("sectionFilterSelect").value;
   if (!projectId || !suiteId) return;
 
   showError("");
@@ -555,9 +672,10 @@ async function fetchCases() {
     allCases = [];
     let offset = 0;
     const limit = 250;
+    const sectionParam = sectionId ? `&section_id=${sectionId}` : "";
 
     while (true) {
-      const data = await apiGet(`get_cases/${projectId}&suite_id=${suiteId}&limit=${limit}&offset=${offset}`);
+      const data = await apiGet(`get_cases/${projectId}&suite_id=${suiteId}${sectionParam}&limit=${limit}&offset=${offset}`);
       const cases = data.cases || data;
       if (!Array.isArray(cases) || cases.length === 0) break;
       allCases = allCases.concat(cases);
@@ -761,35 +879,45 @@ function downloadCSV() {
 
 // ── Import feature ──────────────────────────────────────────────────────────
 
-let importedRows = [];
-let importFormat = "";
-let allSections  = [];
-let importProjectId = "";
+let importedRows      = [];
+let csvHeaders        = [];
+let importFormat      = "";
+let allSections       = [];
+let importProjectId   = "";
+let selectedSectionId = "";
+let importCancelled   = false;
 
 const TYPE_MAP     = { functional:1, acceptance:2, automated:3, smoke:5, manual:6 };
 const PRIORITY_MAP = { low:1, medium:2, high:3, critical:4 };
 
 async function apiPost(endpoint, body) {
-  const directUrl = `${baseUrl}/index.php?/api/v2/${endpoint}`;
-  const opts = {
-    method: "POST",
-    headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  };
-  const proxies = [
-    directUrl,
-    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
+  const directUrl  = `${baseUrl}/index.php?/api/v2/${endpoint}`;
+  const jsonBody   = JSON.stringify(body);
+
+  // Proxy attempts for POST — allorigins is GET-only and removed.
+  // cors-anywhere supports POST with Authorization headers.
+  // corsproxy.io works when the server allows the Origin header it injects.
+  const attempts = [
+    // 1. Direct (works when TestRail has CORS enabled for this origin, or same-origin)
+    { url: directUrl, headers: { "Authorization": authHeader, "Content-Type": "application/json" } },
+    // 2. cors-anywhere — explicitly built for POST + Authorization forwarding
+    { url: `https://cors-anywhere.herokuapp.com/${directUrl}`,
+      headers: { "Authorization": authHeader, "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" } },
+    // 3. corsproxy.io — works for many TestRail instances
+    { url: `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+      headers: { "Authorization": authHeader, "Content-Type": "application/json" } },
   ];
+
   let lastError = "";
-  for (const url of proxies) {
+  for (const attempt of attempts) {
     try {
-      const res = await fetch(url, opts);
-      if (!res.ok) { lastError = `HTTP ${res.status}`; continue; }
+      const res = await fetch(attempt.url, { method: "POST", headers: attempt.headers, body: jsonBody });
+      if (!res.ok) { lastError = `HTTP ${res.status} from ${attempt.url}`; continue; }
       return res.json();
     } catch (e) { lastError = e.message; }
   }
-  throw new Error(lastError);
+  throw new Error(`Import failed — all CORS proxies rejected the POST request. ${lastError}. ` +
+    `Try visiting https://cors-anywhere.herokuapp.com/corsdemo and clicking "Request temporary access", then retry.`);
 }
 
 function toggleImport() {
@@ -807,11 +935,22 @@ function onDrop(e)      { e.preventDefault(); onDragLeave(); processFile(e.dataT
 function onFileSelected(e) { processFile(e.target.files[0]); }
 
 function parseCSV(text) {
+  const rawDelim  = document.getElementById("csvDelimiter")?.value || ",";
+  const delimiter = rawDelim === "\\t" ? "\t" : (rawDelim || ",");
+  const startRow  = Math.max(0, (parseInt(document.getElementById("startRow")?.value) || 1) - 1);
+  const hasHeader = document.getElementById("isHeaderRow")?.checked !== false;
+
   const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (!lines.length) return { headers: [], rows: [] };
-  const headers = splitCSVLine(lines[0]).map(h => h.trim().toLowerCase());
-  const rows = lines.slice(1).map(l => {
-    const vals = splitCSVLine(l);
+  if (!lines.length || startRow >= lines.length) return { headers: [], rows: [] };
+
+  const split = line => splitCSVLine(line, delimiter);
+  const headers = hasHeader
+    ? split(lines[startRow]).map(h => h.trim().toLowerCase())
+    : split(lines[startRow]).map((_, i) => `column ${i + 1}`);
+
+  const dataStart = hasHeader ? startRow + 1 : startRow;
+  const rows = lines.slice(dataStart).map(l => {
+    const vals = split(l);
     const row = {};
     headers.forEach((h, i) => { row[h] = (vals[i] || "").trim(); });
     return row;
@@ -819,7 +958,7 @@ function parseCSV(text) {
   return { headers, rows };
 }
 
-function splitCSVLine(line) {
+function splitCSVLine(line, delimiter = ",") {
   const result = [];
   let cur = "", inQuote = false;
   for (let i = 0; i < line.length; i++) {
@@ -827,8 +966,9 @@ function splitCSVLine(line) {
     if (ch === '"') {
       if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
       else inQuote = !inQuote;
-    } else if (ch === ',' && !inQuote) {
+    } else if (!inQuote && line.startsWith(delimiter, i)) {
       result.push(cur); cur = "";
+      i += delimiter.length - 1;
     } else cur += ch;
   }
   result.push(cur);
@@ -886,22 +1026,32 @@ function processFile(file) {
   reader.onload = e => {
     const { headers, rows } = parseCSV(e.target.result);
     importFormat = detectFormat(headers);
-    if (importFormat === "unknown") {
-      alert("Could not detect CSV format. Ensure it has a Title column and either Section (TestRail format) or Suite/Case ID (export format).");
+    if (!headers.includes("title") && importFormat === "unknown") {
+      alert("Could not detect CSV format. Ensure it has at least a 'Title' column.");
       return;
     }
 
-    if (importFormat === "export") {
-      importedRows = groupExportRows(rows);
-    } else {
-      importedRows = rows.map(r => normaliseRow(r, importFormat));
-    }
+    csvHeaders   = headers;
+    importedRows = rows;  // store raw rows — mapping applied at import time
 
-    const fmtLabel = importFormat === "testrail" ? "TestRail import format" : "Export format";
+    const fmtLabel = importFormat === "testrail" ? "TestRail import format"
+                   : importFormat === "export"   ? "Export format"
+                   : "Custom format";
+    const rowCount = rows.length;
     document.getElementById("importDetectedText").innerHTML =
-      `<strong>Detected:</strong> ${fmtLabel} &nbsp;•&nbsp; <strong>${importedRows.length}</strong> test cases`;
+      `<strong>Detected:</strong> ${fmtLabel} &nbsp;•&nbsp; <strong>${rowCount}</strong> rows`;
     document.getElementById("importDetected").style.display = "flex";
 
+    renderMappingTable(headers);
+    // Apply any saved mapping that was loaded before the CSV
+    if (window._pendingMappingConfig) {
+      headers.forEach((h, i) => {
+        const sel = document.getElementById(`map_${i}`);
+        if (sel && window._pendingMappingConfig[h] !== undefined) sel.value = window._pendingMappingConfig[h];
+      });
+      window._pendingMappingConfig = null;
+    }
+    document.getElementById("importMapping").style.display = "block";
     renderPreview();
     document.getElementById("importPreview").style.display = "block";
     updateImportBtn();
@@ -909,17 +1059,86 @@ function processFile(file) {
   reader.readAsText(file);
 }
 
+const TESTRAIL_FIELDS = [
+  { label: "(ignore)",           value: ""                    },
+  { label: "Title (required)",   value: "title"               },
+  { label: "Section",            value: "_section"            },
+  { label: "Steps",              value: "custom_steps"        },
+  { label: "Expected Result",    value: "custom_expected"     },
+  { label: "Preconditions",      value: "custom_preconds"     },
+  { label: "Requirements",       value: "custom_requirements" },
+  { label: "Type",               value: "type_id"             },
+  { label: "Priority",           value: "priority_id"         },
+];
+
+function autoDetectMapping(header) {
+  const h = header.toLowerCase();
+  if (h === "section" || h === "section hierarchy")           return "_section";
+  if (h.includes("title"))                                    return "title";
+  if (h === "step" || h === "steps" || h.includes("step action") || (h.includes("step") && !h.includes("expected"))) return "custom_steps";
+  if (h.includes("expected"))                                 return "custom_expected";
+  if (h.includes("precond"))                                  return "custom_preconds";
+  if (h.includes("reference") || h.includes("requirement"))  return "custom_requirements";
+  if (h === "type")                               return "type_id";
+  if (h === "priority")                           return "priority_id";
+  return "";
+}
+
+function renderMappingTable(headers) {
+  const options = TESTRAIL_FIELDS.map(f =>
+    `<option value="${f.value}">${f.label}</option>`
+  ).join("");
+
+  const rows = headers.map((h, i) => {
+    const detected = autoDetectMapping(h);
+    const opts = TESTRAIL_FIELDS.map(f =>
+      `<option value="${f.value}"${f.value === detected ? " selected" : ""}>${f.label}</option>`
+    ).join("");
+    return `<tr>
+      <td class="csv-col">${esc(h)}</td>
+      <td><select id="map_${i}" onchange="renderPreview()">${opts}</select></td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("mappingTable").innerHTML = `
+    <thead><tr><th>CSV Column</th><th>Maps to TestRail Field</th></tr></thead>
+    <tbody>${rows}</tbody>`;
+}
+
+function getMappingFromUI() {
+  const map = {};
+  csvHeaders.forEach((h, i) => {
+    const sel = document.getElementById(`map_${i}`);
+    if (sel) map[h] = sel.value;
+  });
+  return map;
+}
+
 function renderPreview() {
+  const mapping = getMappingFromUI();
+  const titleCol    = csvHeaders.find(h => mapping[h] === "title")          || "";
+  const stepsCol    = csvHeaders.find(h => mapping[h] === "custom_steps")   || "";
+  const expectedCol = csvHeaders.find(h => mapping[h] === "custom_expected")|| "";
+
   const sample = importedRows.slice(0, 5);
   const table = document.getElementById("previewTable");
   table.innerHTML = `
-    <thead><tr><th>Title</th><th>Steps (preview)</th><th>Expected Result</th></tr></thead>
+    <thead><tr>
+      <th>Title${titleCol ? ` <small style="font-weight:400;color:#94a3b8;">(${esc(titleCol)})</small>` : ""}</th>
+      <th>Steps${stepsCol ? ` <small style="font-weight:400;color:#94a3b8;">(${esc(stepsCol)})</small>` : ""}</th>
+      <th>Expected Result${expectedCol ? ` <small style="font-weight:400;color:#94a3b8;">(${esc(expectedCol)})</small>` : ""}</th>
+    </tr></thead>
     <tbody>
-      ${sample.map(r => `<tr>
-        <td title="${esc(r.title)}">${esc(r.title.substring(0,60))}${r.title.length>60?"…":""}</td>
-        <td title="${esc(r.steps)}">${esc(r.steps.substring(0,80))}${r.steps.length>80?"…":""}</td>
-        <td title="${esc(r.expected)}">${esc(r.expected.substring(0,60))}${r.expected.length>60?"…":""}</td>
-      </tr>`).join("")}
+      ${sample.map(r => {
+        const t = titleCol    ? (r[titleCol]    || "") : "";
+        const s = stepsCol    ? (r[stepsCol]    || "") : "";
+        const x = expectedCol ? (r[expectedCol] || "") : "";
+        return `<tr>
+          <td title="${esc(t)}">${esc(t.substring(0,60))}${t.length>60?"…":""}</td>
+          <td title="${esc(s)}">${esc(s.substring(0,80))}${s.length>80?"…":""}</td>
+          <td title="${esc(x)}">${esc(x.substring(0,60))}${x.length>60?"…":""}</td>
+        </tr>`;
+      }).join("")}
     </tbody>`;
 }
 
@@ -969,93 +1188,129 @@ async function onImportProjectChange() {
 
 async function onImportSuiteChange() {
   const suiteId = document.getElementById("importSuiteSelect").value;
-  const secSel  = document.getElementById("importSectionSelect");
-  const subSel  = document.getElementById("importSubsectionSelect");
-  secSel.innerHTML = '<option value="">Loading sections...</option>';
-  secSel.disabled = true;
-  subSel.innerHTML = '<option value="">None — import into section above</option>';
-  subSel.disabled = true;
+  selectedSectionId = "";
   document.getElementById("importBtnRow").style.display = "none";
 
-  if (!suiteId || !importProjectId) return;
+  const tree = document.getElementById("sectionTree");
+  tree.innerHTML = '<div class="section-tree-empty">Loading sections…</div>';
+
+  if (!suiteId || !importProjectId) {
+    tree.innerHTML = '<div class="section-tree-empty">Select a suite first...</div>';
+    return;
+  }
 
   try {
     const data = await apiGet(`get_sections/${importProjectId}&suite_id=${suiteId}`);
     allSections = data.sections || (Array.isArray(data) ? data : []);
-    secSel.innerHTML = '<option value="">Select a section...</option>';
-    allSections.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.id;
-      opt.textContent = "—".repeat(s.depth || 0) + " " + s.name;
-      secSel.appendChild(opt);
-    });
-    secSel.disabled = false;
+    renderSectionTree();
   } catch (e) {
-    secSel.innerHTML = '<option value="">Error loading sections</option>';
+    tree.innerHTML = '<div class="section-tree-empty">Error loading sections</div>';
   }
 }
 
-function onImportSectionChange() {
-  const parentId = document.getElementById("importSectionSelect").value;
-  const subSel   = document.getElementById("importSubsectionSelect");
-  subSel.innerHTML = '<option value="">None — import into section above</option>';
-  subSel.disabled = true;
-
-  if (!parentId) { document.getElementById("importBtnRow").style.display = "none"; return; }
-
-  const children = allSections.filter(s => String(s.parent_id) === String(parentId));
-  if (children.length) {
-    children.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.id; opt.textContent = s.name;
-      subSel.appendChild(opt);
-    });
-    subSel.disabled = false;
+function renderSectionTree() {
+  const tree = document.getElementById("sectionTree");
+  if (!allSections.length) {
+    tree.innerHTML = '<div class="section-tree-empty">No sections found</div>';
+    return;
   }
+  tree.innerHTML = allSections.map(s => {
+    const indent  = (s.depth || 0) * 16;
+    const hasKids = allSections.some(c => String(c.parent_id) === String(s.id));
+    const icon    = hasKids ? "📁" : "📄";
+    const sel     = String(s.id) === String(selectedSectionId) ? " selected" : "";
+    return `<div class="section-tree-item${sel}" style="padding-left:${10 + indent}px" onclick="selectSection(${s.id})">
+      <span>${icon}</span><span>${esc(s.name)}</span>
+    </div>`;
+  }).join("");
+}
 
+function selectSection(id) {
+  selectedSectionId = String(id);
+  renderSectionTree();
   updateImportBtn();
+}
+
+function toggleAdvOpts() {
+  const body  = document.getElementById("advOptsBody");
+  const arrow = document.getElementById("advOptsArrow");
+  const open  = body.style.display === "none";
+  body.style.display = open ? "block" : "none";
+  arrow.textContent  = open ? "▼" : "▶";
+}
+
+function cancelImport() {
+  importCancelled = true;
+  document.getElementById("cancelImportBtn").disabled = true;
+  document.getElementById("progressLabel").textContent = "Cancelling…";
 }
 
 function updateImportBtn() {
   const btnRow = document.getElementById("importBtnRow");
-  const secVal = document.getElementById("importSectionSelect").value;
-  if (secVal && importedRows.length) {
-    document.getElementById("importBtn").textContent = `Import ${importedRows.length} Case${importedRows.length!==1?"s":""}`;
+  const n = importedRows.length;
+  if (selectedSectionId && n) {
+    document.getElementById("importBtn").textContent = `Import ${n} Case${n!==1?"s":""}`;
     btnRow.style.display = "flex";
+  } else {
+    btnRow.style.display = "none";
   }
 }
 
 async function runImport() {
-  const subVal = document.getElementById("importSubsectionSelect").value;
-  const secVal = document.getElementById("importSectionSelect").value;
-  const sectionId = subVal || secVal;
-  if (!sectionId) { alert("Please select a section to import into."); return; }
+  if (!selectedSectionId) { alert("Please select a section in the tree to import into."); return; }
 
+  importCancelled = false;
   document.getElementById("importBtn").disabled = true;
+  document.getElementById("cancelImportBtn").disabled = false;
   document.getElementById("importProgress").style.display = "block";
   document.getElementById("importResult").innerHTML = "";
 
+  const mapping       = getMappingFromUI();
+  const rowLayout     = document.querySelector('input[name="rowLayout"]:checked')?.value || "single";
+  const ignoreNoTitle = document.getElementById("ignoreNoTitle")?.checked !== false;
+
+  // For "multiple rows" layout: group rows with same title into one case
+  let rowsToImport = importedRows;
+  if (rowLayout === "multiple") {
+    const titleCol = csvHeaders.find(h => mapping[h] === "title");
+    const stepsCol = csvHeaders.find(h => mapping[h] === "custom_steps");
+    const grouped = [];
+    const seen = {};
+    importedRows.forEach(r => {
+      const t = titleCol ? (r[titleCol] || "").trim() : "";
+      const s = stepsCol ? (r[stepsCol] || "").trim() : "";
+      if (t && seen[t] !== undefined) {
+        if (s && stepsCol) grouped[seen[t]][stepsCol] = (grouped[seen[t]][stepsCol] ? grouped[seen[t]][stepsCol] + "\n" : "") + s;
+      } else {
+        if (t || !ignoreNoTitle) { seen[t] = grouped.length; grouped.push({ ...r }); }
+      }
+    });
+    rowsToImport = grouped;
+  }
+
   let done = 0, failed = 0;
   const errors = [];
-  const total = importedRows.length;
+  const total = rowsToImport.length;
 
-  for (const row of importedRows) {
-    const payload = { title: row.title || "Untitled" };
-    if (row.steps)      payload.custom_steps    = row.steps;
-    if (row.expected)   payload.custom_expected  = row.expected;
-    if (row.precond)    payload.custom_preconds  = row.precond;
-    if (row.references) payload.custom_requirements = row.references;
-    if (row.type) {
-      const tid = TYPE_MAP[row.type.toLowerCase()];
-      if (tid) payload.type_id = tid;
+  for (const row of rowsToImport) {
+    const payload = {};
+    csvHeaders.forEach(h => {
+      const field = mapping[h];
+      const val   = (row[h] || "").trim();
+      if (!field || !val || field === "_section") return;  // _section is display-only
+      if (field === "type_id")          { const t = TYPE_MAP[val.toLowerCase()];     if (t) payload.type_id     = t; }
+      else if (field === "priority_id") { const p = PRIORITY_MAP[val.toLowerCase()]; if (p) payload.priority_id = p; }
+      else payload[field] = val;
+    });
+    if (!payload.title) {
+      if (ignoreNoTitle) { done++; continue; }
+      payload.title = "Untitled";
     }
-    if (row.priority) {
-      const pid = PRIORITY_MAP[row.priority.toLowerCase()];
-      if (pid) payload.priority_id = pid;
-    }
+
+    if (importCancelled) break;
 
     try {
-      await apiPost(`add_case/${sectionId}`, payload);
+      await apiPost(`add_case/${selectedSectionId}`, payload);
       done++;
     } catch (e) {
       failed++;
@@ -1063,17 +1318,79 @@ async function runImport() {
     }
 
     const pct = Math.round(((done + failed) / total) * 100);
-    document.getElementById("progressFill").style.width = pct + "%";
-    document.getElementById("progressLabel").textContent = `Importing ${done + failed} / ${total}…`;
+    document.getElementById("progressFill").style.width  = pct + "%";
+    document.getElementById("progressLabel").textContent = `Importing ${done + failed} / ${total} cases…`;
     await new Promise(r => setTimeout(r, 50));
   }
 
   document.getElementById("importBtn").disabled = false;
+  document.getElementById("cancelImportBtn").disabled = true;
+
+  if (importCancelled) {
+    document.getElementById("importResult").innerHTML =
+      `<div class="import-result partial">&#9888; Cancelled — <strong>${done}</strong> imported before stopping</div>`;
+    document.getElementById("progressLabel").textContent = "Cancelled";
+    return;
+  }
+
   const cls = failed === 0 ? "success" : "partial";
   let msg = `&#10003; Done: <strong>${done}</strong> imported`;
-  if (failed) msg += `, <strong>${failed}</strong> failed<br><small style="color:#92400e">${errors.slice(0,3).join("<br>")}</small>`;
+  if (failed) {
+    msg += `, <strong>${failed}</strong> failed`;
+    const corsHint = errors.some(e => e.includes("CORS") || e.includes("proxy"))
+      ? `<br><small>&#9432; CORS issue detected — visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank">cors-anywhere demo</a> and click "Request temporary access", then retry.</small>`
+      : "";
+    msg += `<br><small style="color:#92400e">${errors.slice(0,3).map(e => esc(e)).join("<br>")}</small>${corsHint}`;
+  }
   document.getElementById("importResult").innerHTML = `<div class="import-result ${cls}">${msg}</div>`;
   document.getElementById("progressLabel").textContent = "Complete";
+}
+
+function saveMapping() {
+  const config = {
+    rowLayout:    document.querySelector('input[name="rowLayout"]:checked')?.value || "single",
+    ignoreNoTitle: document.getElementById("ignoreNoTitle")?.checked !== false,
+    columns:      getMappingFromUI()
+  };
+  const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "testrail_mapping.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function loadMapping(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const config = JSON.parse(e.target.result);
+      if (config.rowLayout) {
+        const radio = document.querySelector(`input[name="rowLayout"][value="${config.rowLayout}"]`);
+        if (radio) radio.checked = true;
+      }
+      if (typeof config.ignoreNoTitle === "boolean") {
+        const cb = document.getElementById("ignoreNoTitle");
+        if (cb) cb.checked = config.ignoreNoTitle;
+      }
+      if (config.columns && csvHeaders.length) {
+        csvHeaders.forEach((h, i) => {
+          const sel = document.getElementById(`map_${i}`);
+          if (sel && config.columns[h] !== undefined) sel.value = config.columns[h];
+        });
+        renderPreview();
+      } else if (config.columns) {
+        // Store for later when CSV is loaded
+        window._pendingMappingConfig = config.columns;
+      }
+      document.getElementById("importResult").innerHTML =
+        `<div class="import-result success">&#10003; Mapping loaded from file</div>`;
+    } catch { alert("Invalid mapping file."); }
+    event.target.value = "";
+  };
+  reader.readAsText(file);
 }
 
 // Show import card once connected (called from connect())
