@@ -618,6 +618,7 @@ async function onProjectChange() {
   try {
     const data = await apiGet(`get_suites/${projectId}`);
     const suites = Array.isArray(data) ? data : (data.suites ? data.suites : [data]);
+    suitesCache[projectId] = suites;   // cache for import card reuse
 
     if (suites.length === 0) {
       suiteSelect.innerHTML = '<option value="">No suites found</option>';
@@ -638,18 +639,28 @@ async function onProjectChange() {
     suiteSelect.onchange = async () => {
       fetchBtn.disabled = !suiteSelect.value;
       selectedSuiteName = suiteSelect.selectedOptions[0]?.textContent || "";
-      // Load section filter for export
       const secFilter = document.getElementById("sectionFilterSelect");
       secFilter.innerHTML = '<option value="">All sections</option>';
       secFilter.disabled = true;
       if (!suiteSelect.value) return;
+      const cacheKey = `${projectId}_${suiteSelect.value}`;
+      const cachedSecs = sectionsCache[cacheKey];
+      if (cachedSecs) {
+        cachedSecs.forEach(s => {
+          const o = document.createElement("option");
+          o.value = s.id; o.textContent = "—".repeat(s.depth || 0) + " " + s.name;
+          secFilter.appendChild(o);
+        });
+        secFilter.disabled = false;
+        return;
+      }
       try {
         const d = await apiGet(`get_sections/${projectId}&suite_id=${suiteSelect.value}`);
         const secs = d.sections || (Array.isArray(d) ? d : []);
+        sectionsCache[cacheKey] = secs;  // cache for import reuse
         secs.forEach(s => {
           const o = document.createElement("option");
-          o.value = s.id;
-          o.textContent = "—".repeat(s.depth || 0) + " " + s.name;
+          o.value = s.id; o.textContent = "—".repeat(s.depth || 0) + " " + s.name;
           secFilter.appendChild(o);
         });
         secFilter.disabled = false;
@@ -891,6 +902,8 @@ let allSections       = [];
 let importProjectId   = "";
 let selectedSectionId = "";
 let importCancelled   = false;
+const suitesCache     = {};   // { projectId: [suite, ...] }
+const sectionsCache   = {};   // { "projectId_suiteId": [section, ...] }
 
 const TYPE_MAP     = { functional:1, acceptance:2, automated:3, smoke:5, manual:6 };
 const PRIORITY_MAP = { low:1, medium:2, high:3, critical:4 };
@@ -1180,9 +1193,7 @@ async function onImportProjectChange() {
 
   if (!importProjectId) { suiteSelect.innerHTML = '<option value="">Select a project first...</option>'; return; }
 
-  try {
-    const data = await apiGet(`get_suites/${importProjectId}`);
-    const suites = Array.isArray(data) ? data : (data.suites ? data.suites : [data]);
+  const fillSuites = (suites) => {
     suiteSelect.innerHTML = '<option value="">Select a suite...</option>';
     suites.forEach(s => {
       if (s && s.name) {
@@ -1192,6 +1203,16 @@ async function onImportProjectChange() {
       }
     });
     suiteSelect.disabled = false;
+  };
+
+  const cached = suitesCache[importProjectId];
+  if (cached) { fillSuites(cached); return; }
+
+  try {
+    const data = await apiGet(`get_suites/${importProjectId}`);
+    const suites = Array.isArray(data) ? data : (data.suites ? data.suites : [data]);
+    suitesCache[importProjectId] = suites;
+    fillSuites(suites);
   } catch (e) {
     suiteSelect.innerHTML = `<option value="">Error: ${esc(e.message.substring(0, 60))}</option>`;
   }
@@ -1210,9 +1231,18 @@ async function onImportSuiteChange() {
     return;
   }
 
+  const cacheKey = `${importProjectId}_${suiteId}`;
+  const cachedSecs = sectionsCache[cacheKey];
+  if (cachedSecs) {
+    allSections = cachedSecs;
+    renderSectionTree();
+    return;
+  }
+
   try {
     const data = await apiGet(`get_sections/${importProjectId}&suite_id=${suiteId}`);
     allSections = data.sections || (Array.isArray(data) ? data : []);
+    sectionsCache[cacheKey] = allSections;
     renderSectionTree();
   } catch (e) {
     tree.innerHTML = '<div class="section-tree-empty">Error loading sections</div>';
