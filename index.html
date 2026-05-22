@@ -994,17 +994,42 @@ function parseCSV(text) {
   const startRow  = Math.max(0, (parseInt(document.getElementById("startRow")?.value) || 1) - 1);
   const hasHeader = document.getElementById("isHeaderRow")?.checked !== false;
 
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (!lines.length || startRow >= lines.length) return { headers: [], rows: [] };
+  // Proper CSV tokenisation — newlines inside quoted fields stay as field content
+  const records = [];
+  let curField = "", curRecord = [], inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuote) {
+      if (ch === '"') {
+        if (text[i+1] === '"') { curField += '"'; i++; }   // escaped ""
+        else inQuote = false;
+      } else curField += ch;
+    } else {
+      if (ch === '"') inQuote = true;
+      else if (text.startsWith(delimiter, i)) {
+        curRecord.push(curField); curField = "";
+        i += delimiter.length - 1;
+      } else if (ch === '\r') { /* CRLF: drop CR */ }
+      else if (ch === '\n') {
+        curRecord.push(curField); curField = "";
+        if (curRecord.some(v => v !== "")) records.push(curRecord);
+        curRecord = [];
+      } else curField += ch;
+    }
+  }
+  if (curField !== "" || curRecord.length) {
+    curRecord.push(curField);
+    if (curRecord.some(v => v !== "")) records.push(curRecord);
+  }
 
-  const split = line => splitCSVLine(line, delimiter);
+  if (!records.length || startRow >= records.length) return { headers: [], rows: [] };
+
   const headers = hasHeader
-    ? split(lines[startRow]).map(h => h.trim().toLowerCase())
-    : split(lines[startRow]).map((_, i) => `column ${i + 1}`);
+    ? records[startRow].map(h => h.trim().toLowerCase())
+    : records[startRow].map((_, i) => `column ${i + 1}`);
 
   const dataStart = hasHeader ? startRow + 1 : startRow;
-  const rows = lines.slice(dataStart).map(l => {
-    const vals = split(l);
+  const rows = records.slice(dataStart).map(vals => {
     const row = {};
     headers.forEach((h, i) => { row[h] = (vals[i] || "").trim(); });
     return row;
