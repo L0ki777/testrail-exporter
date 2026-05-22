@@ -423,16 +423,32 @@ let selectedSuiteName = "";
 let selectedProjectName = "";
 
 function buildAttempts(directUrl) {
-  const attempts = [];
+  // If user has configured a CORS proxy, use ONLY that (no slow public fallbacks)
   if (corsProxy) {
-    const sep = corsProxy.endsWith("/") ? "" : "/";
-    if (corsProxy.includes("?")) attempts.push(corsProxy + encodeURIComponent(directUrl));
-    else attempts.push(corsProxy + sep + directUrl);
+    const isLocalProxy = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(corsProxy);
+    let url;
+    if (isLocalProxy) {
+      // local-cors-proxy: replace target host with the proxy URL (path only)
+      const path = directUrl.startsWith(baseUrl) ? directUrl.substring(baseUrl.length) : directUrl;
+      const sep  = corsProxy.endsWith("/") || path.startsWith("/") ? "" : "/";
+      url = corsProxy + sep + path;
+    } else if (corsProxy.includes("?")) {
+      // corsproxy.io style: full URL encoded as query string
+      url = corsProxy + encodeURIComponent(directUrl);
+    } else {
+      // cors-anywhere style: full URL appended after the proxy
+      const sep = corsProxy.endsWith("/") ? "" : "/";
+      url = corsProxy + sep + directUrl;
+    }
+    console.log("[CORS proxy]", url);  // visible in DevTools console
+    return [url];   // ← single attempt, no fallback
   }
-  attempts.push(directUrl);
-  attempts.push(`https://corsproxy.io/?${encodeURIComponent(directUrl)}`);
-  attempts.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`);
-  return attempts;
+  // No proxy configured — use direct + public fallbacks
+  return [
+    directUrl,
+    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
+  ];
 }
 
 function toggleHelp() {
@@ -530,7 +546,7 @@ async function apiGet(endpoint) {
   let lastError = "";
   for (const url of attempts) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url, {
         headers: { "Authorization": authHeader, "Content-Type": "application/json" },
@@ -539,13 +555,13 @@ async function apiGet(endpoint) {
       clearTimeout(timer);
       if (!res.ok) {
         const errText = await res.text();
-        lastError = `HTTP ${res.status}: ${errText}`;
+        lastError = `HTTP ${res.status}: ${errText.substring(0,100)}`;
         continue;
       }
       return res.json();
     } catch (e) {
       clearTimeout(timer);
-      lastError = e.name === "AbortError" ? `Timed out (${url.substring(0,40)}…)` : e.message;
+      lastError = e.name === "AbortError" ? `Timed out after 5s on ${url}` : `${e.message} (${url})`;
       continue;
     }
   }
@@ -1194,15 +1210,12 @@ function populateImportProjects() {
 
 async function onImportProjectChange() {
   importProjectId = document.getElementById("importProjectSelect").value;
-  const suiteSelect  = document.getElementById("importSuiteSelect");
-  const secSel       = document.getElementById("importSectionSelect");
-  const subSel       = document.getElementById("importSubsectionSelect");
+  const suiteSelect = document.getElementById("importSuiteSelect");
+  const tree        = document.getElementById("sectionTree");
+  selectedSectionId = "";
   suiteSelect.innerHTML = '<option value="">Loading suites...</option>';
   suiteSelect.disabled = true;
-  secSel.innerHTML = '<option value="">Select a suite first...</option>';
-  secSel.disabled = true;
-  subSel.innerHTML = '<option value="">None — import into section above</option>';
-  subSel.disabled = true;
+  tree.innerHTML = '<div class="section-tree-empty">Select a suite first...</div>';
   document.getElementById("importBtnRow").style.display = "none";
 
   if (!importProjectId) { suiteSelect.innerHTML = '<option value="">Select a project first...</option>'; return; }
