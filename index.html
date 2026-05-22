@@ -381,6 +381,14 @@
           <input type="checkbox" id="ignoreNoTitle" checked>
           Ignore test cases/records without a title (e.g. empty rows at file end)
         </label>
+
+        <!-- Extra fields for required custom fields -->
+        <div class="mapping-section-label" style="margin-top:16px;">Additional Fields (JSON)
+          <span style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;">&mdash; merged into every test case. Add required custom fields here.</span>
+        </div>
+        <textarea id="extraFields" rows="3"
+          style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-family:monospace;font-size:12px;margin-top:6px;"
+          placeholder='{"custom_review_status": 1, "custom_automation_type": 0}'>{"custom_review_status": 1}</textarea>
       </div>
 
       <!-- Preview table -->
@@ -1362,6 +1370,18 @@ async function runImport() {
   const rowLayout     = document.querySelector('input[name="rowLayout"]:checked')?.value || "single";
   const ignoreNoTitle = document.getElementById("ignoreNoTitle")?.checked !== false;
 
+  // Parse Additional Fields JSON — merged into every case payload
+  let extraFields = {};
+  const extraRaw = document.getElementById("extraFields")?.value.trim();
+  if (extraRaw) {
+    try { extraFields = JSON.parse(extraRaw); }
+    catch (e) {
+      alert("Additional Fields is not valid JSON: " + e.message);
+      document.getElementById("importBtn").disabled = false;
+      return;
+    }
+  }
+
   // For "multiple rows" layout: group rows with same title into one case
   let rowsToImport = importedRows;
   if (rowLayout === "multiple") {
@@ -1386,7 +1406,7 @@ async function runImport() {
   const total = rowsToImport.length;
 
   for (const row of rowsToImport) {
-    const payload = {};
+    const payload = { ...extraFields };   // start with user-provided custom fields
     csvHeaders.forEach(h => {
       const field = mapping[h];
       const val   = (row[h] || "").trim();
